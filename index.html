@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumption Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Added SheetJS library for Excel parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 1.5rem;
+        }
+        .filter-button {
+            background-color: #e5e7eb;
+            color: #374151;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+            cursor: pointer;
+        }
+        .btn-primary {
+            background-color: #4f46e5;
+            color: white;
+            font-weight: 600;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:disabled {
+            background-color: #a5b4fc;
+            cursor: not-allowed;
+        }
+        .input-field {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.5rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-900">Consumption Analyzer</h1>
+            <p class="mt-2 text-lg text-gray-600">Upload your CSV or Excel file to visualize consumption trends.</p>
+        </header>
+
+        <div class="card max-w-2xl mx-auto">
+            <h2 class="text-xl font-semibold mb-4 border-b pb-2">Upload Data File</h2>
+            <input type="file" id="file-input" accept=".csv,.xlsx" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
+            
+            <div id="status-message" class="mt-4 p-4 rounded-lg hidden"></div>
+        </div>
+
+        <div id="chart-container" class="mt-8 card hidden">
+            <h2 class="text-xl font-semibold mb-4">Monthly Consumption by Domain & Channel</h2>
+            <div style="height: 400px;">
+                <canvas id="consumption-chart"></canvas>
+            </div>
+        </div>
+
+        <div id="yearly-chart-container" class="mt-8 card hidden">
+            <h2 class="text-xl font-semibold mb-4">Yearly Consumption by Domain & Channel</h2>
+            <div style="height: 400px;">
+                <canvas id="yearly-consumption-chart"></canvas>
+            </div>
+        </div>
+
+        <div id="filter-container" class="mt-8 card hidden">
+            <h2 class="text-xl font-semibold mb-4">Filter Data</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-2">Domains</h3>
+                    <div class="mb-2">
+                        <button class="filter-button" onclick="toggleAll('domains', true)">Select All</button>
+                        <button class="filter-button" onclick="toggleAll('domains', false)">Deselect All</button>
+                    </div>
+                    <div id="domain-filters" class="space-y-1 max-h-48 overflow-y-auto pr-2"></div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-2">Channels</h3>
+                     <div class="mb-2">
+                        <button class="filter-button" onclick="toggleAll('channels', true)">Select All</button>
+                        <button class="filter-button" onclick="toggleAll('channels', false)">Deselect All</button>
+                    </div>
+                    <div id="channel-filters" class="space-y-1 max-h-48 overflow-y-auto pr-2"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="allotment-container" class="mt-8 card hidden">
+            <h2 class="text-xl font-semibold mb-4">Analyze Consumption vs. Allotment</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="total-allotment" class="block text-sm font-medium text-gray-700 mb-1">Total Session Allotment</label>
+                    <input type="number" id="total-allotment" class="input-field" placeholder="e.g., 1000000">
+                </div>
+                <div>
+                    <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Term Start Date</label>
+                    <input type="date" id="start-date" class="input-field">
+                </div>
+                 <div>
+                    <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">Term End Date</label>
+                    <input type="date" id="end-date" class="input-field">
+                </div>
+            </div>
+             <button id="analyze-trends-btn" class="btn-primary w-full mt-4">Generate Trend Analysis</button>
+        </div>
+        
+        <div id="trend-analysis-container" class="mt-8 hidden">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                <div class="card text-center">
+                    <h3 class="text-lg font-medium text-gray-500">Total Consumption</h3>
+                    <p id="kpi-consumption" class="text-4xl font-bold text-indigo-600 mt-2">0%</p>
+                </div>
+                <div class="card text-center">
+                    <h3 class="text-lg font-medium text-gray-500">Pacing</h3>
+                    <p id="kpi-pacing" class="text-4xl font-bold text-blue-600 mt-2">On Track</p>
+                </div>
+                 <div class="card text-center">
+                    <h3 class="text-lg font-medium text-gray-500">Predicted Consumption</h3>
+                    <p id="kpi-predicted" class="text-4xl font-bold text-red-600 mt-2">0%</p>
+                </div>
+            </div>
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-4">Consumption Burn-Up vs. Ideal Pace</h2>
+                <div style="height: 400px;">
+                    <canvas id="trend-chart"></canvas>
+                </div>
+            </div>
+        </div>
+
+
+        <div id="table-container" class="mt-8 card hidden">
+            <h2 class="text-xl font-semibold mb-4">Raw File Contents</h2>
+            <div class="overflow-x-auto max-h-[60vh]">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead id="table-header" class="bg-gray-50 sticky top-0"></thead>
+                    <tbody id="table-body" class="bg-white divide-y divide-gray-200"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const fileInput = document.getElementById('file-input');
+        const statusMessage = document.getElementById('status-message');
+        
+        const chartContainer = document.getElementById('chart-container');
+        const consumptionChartCanvas = document.getElementById('consumption-chart');
+        let consumptionChart = null;
+
+        const yearlyChartContainer = document.getElementById('yearly-chart-container');
+        const yearlyConsumptionChartCanvas = document.getElementById('yearly-consumption-chart');
+        let yearlyConsumptionChart = null;
+
+        const filterContainer = document.getElementById('filter-container');
+        const domainFilters = document.getElementById('domain-filters');
+        const channelFilters = document.getElementById('channel-filters');
+
+        const tableContainer = document.getElementById('table-container');
+        const tableHeader = document.getElementById('table-header');
+        const tableBody = document.getElementById('table-body');
+
+        const allotmentContainer = document.getElementById('allotment-container');
+        const analyzeTrendsBtn = document.getElementById('analyze-trends-btn');
+        const totalAllotmentInput = document.getElementById('total-allotment');
+        const startDateInput = document.getElementById('start-date');
+        const endDateInput = document.getElementById('end-date');
+
+        const trendAnalysisContainer = document.getElementById('trend-analysis-container');
+        const kpiConsumption = document.getElementById('kpi-consumption');
+        const kpiPacing = document.getElementById('kpi-pacing');
+        const kpiPredicted = document.getElementById('kpi-predicted');
+        const trendChartCanvas = document.getElementById('trend-chart');
+        let trendChart = null;
+
+        let originalData = [];
+
+        // --- Event Listeners ---
+        fileInput.addEventListener('change', handleFileSelect);
+        analyzeTrendsBtn.addEventListener('click', generateTrendAnalysis);
+
+        // --- Main Functions ---
+        function handleFileSelect(event) {
+            // Reset UI
+            chartContainer.classList.add('hidden');
+            yearlyChartContainer.classList.add('hidden');
+            tableContainer.classList.add('hidden');
+            filterContainer.classList.add('hidden');
+            allotmentContainer.classList.add('hidden');
+            trendAnalysisContainer.classList.add('hidden');
+            statusMessage.classList.add('hidden');
+            tableHeader.innerHTML = '';
+            tableBody.innerHTML = '';
+            if (consumptionChart) consumptionChart.destroy();
+            if (yearlyConsumptionChart) yearlyConsumptionChart.destroy();
+            if (trendChart) trendChart.destroy();
+
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+
+            if (fileExtension === 'csv') {
+                parseCsv(file);
+            } else if (fileExtension === 'xlsx') {
+                parseXlsx(file);
+            } else {
+                displayMessage('Unsupported file type. Please upload a CSV or XLSX file.', 'error');
+            }
+        }
+
+        function parseCsv(file) {
+             Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                transformHeader: header => header.trim().toLowerCase(), 
+                complete: (results) => processParsedData(results.data, results.errors),
+                error: (err) => displayMessage(`A critical error occurred: ${err.message}`, 'error')
+            });
+        }
+
+        function parseXlsx(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    
+                    const targetSheetName = 'Mda Sheet';
+                    if (!workbook.SheetNames.includes(targetSheetName)) {
+                        throw new Error(`Excel file must contain a sheet named "${targetSheetName}".`);
+                    }
+
+                    const worksheet = workbook.Sheets[targetSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                        header: 1,
+                        defval: ''
+                    });
+
+                    const headers = jsonData[0].map(h => String(h).trim().toLowerCase());
+                    const dataRows = jsonData.slice(1).map(row => {
+                        let obj = {};
+                        headers.forEach((header, index) => {
+                            obj[header] = row[index];
+                        });
+                        return obj;
+                    });
+
+                    processParsedData(dataRows);
+                } catch (err) {
+                     displayMessage(`Error parsing Excel file: ${err.message}`, 'error');
+                }
+            };
+            reader.onerror = () => displayMessage('Error reading the file.', 'error');
+            reader.readAsArrayBuffer(file);
+        }
+
+        function processParsedData(data, errors = []) {
+             if (errors.length) {
+                displayMessage(`Error parsing file: ${errors[0].message}`, 'error');
+                return;
+            }
+
+            if (!data || data.length === 0) {
+                displayMessage('File is empty or could not be parsed.', 'error');
+                return;
+            }
+            
+            try {
+                originalData = data;
+                displayMessage(`Successfully parsed ${data.length} rows.`, 'success');
+                setupFilters(originalData);
+                updateChartFromFilters();
+                displayTable(Object.keys(originalData[0]), originalData);
+                allotmentContainer.classList.remove('hidden');
+            } catch (e) {
+                displayMessage(e.message, 'error');
+            }
+        }
+        
+        function setupFilters(data) {
+            const domains = [...new Set(data.map(row => row.domain || 'Unknown'))].sort();
+            const channels = [...new Set(data.map(row => row.channel || 'Unknown'))].sort();
+
+            domainFilters.innerHTML = '';
+            channelFilters.innerHTML = '';
+
+            domains.forEach(domain => createFilterCheckbox(domain, 'domains', domainFilters));
+            channels.forEach(channel => createFilterCheckbox(channel, 'channels', channelFilters));
+
+            filterContainer.classList.remove('hidden');
+        }
+
+        function createFilterCheckbox(value, groupName, container) {
+            const label = document.createElement('label');
+            label.className = 'flex items-center space-x-2 cursor-pointer';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.name = groupName;
+            checkbox.value = value;
+            checkbox.checked = true;
+            checkbox.className = 'h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500';
+            checkbox.addEventListener('change', updateChartFromFilters);
+
+            const span = document.createElement('span');
+            span.textContent = value;
+            span.className = 'text-sm text-gray-700';
+
+            label.appendChild(checkbox);
+            label.appendChild(span);
+            container.appendChild(label);
+        }
+
+        function toggleAll(groupName, shouldBeChecked) {
+            document.querySelectorAll(`input[name="${groupName}"]`).forEach(checkbox => {
+                checkbox.checked = shouldBeChecked;
+            });
+            updateChartFromFilters();
+        }
+
+        function updateChartFromFilters() {
+            const selectedDomains = Array.from(document.querySelectorAll('input[name="domains"]:checked')).map(cb => cb.value);
+            const selectedChannels = Array.from(document.querySelectorAll('input[name="channels"]:checked')).map(cb => cb.value);
+
+            const filteredData = originalData.filter(row => {
+                return selectedDomains.includes(row.domain || 'Unknown') && selectedChannels.includes(row.channel || 'Unknown');
+            });
+
+            displayConsumptionChart(filteredData);
+            displayYearlyConsumptionChart(filteredData);
+        }
+
+        function displayConsumptionChart(data) {
+            const requiredCols = ['month', 'domain', 'channel', 'count'];
+            if (originalData.length > 0 && !requiredCols.every(col => originalData[0].hasOwnProperty(col))) {
+                throw new Error(`The CSV file is missing required columns. Please ensure it has: ${requiredCols.join(', ')}.`);
+            }
+
+            const monthlyData = {};
+            const datasetKeys = new Set();
+
+            data.forEach(row => {
+                const date = parseMDYDate(row.month);
+                if (!date) return;
+                const monthKey = date.toISOString().slice(0, 7);
+                const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                const dataKey = `${row.domain || 'Unknown'} - ${row.channel || 'Unknown'}`;
+                datasetKeys.add(dataKey);
+                if (!monthlyData[monthKey]) monthlyData[monthKey] = {};
+                if (!monthlyData[monthKey][dataKey]) monthlyData[monthKey][dataKey] = 0;
+                monthlyData[monthKey][dataKey] += count;
+            });
+
+            const sortedMonths = [...new Set(originalData.map(r => parseMDYDate(r.month)).filter(Boolean).map(d => d.toISOString().slice(0, 7)))].sort();
+            const sortedDatasetKeys = Array.from(datasetKeys).sort();
+
+            const datasets = sortedDatasetKeys.map((key, index) => ({
+                label: key,
+                data: sortedMonths.map(month => monthlyData[month]?.[key] || 0),
+                borderColor: generateColor(index),
+                backgroundColor: generateColor(index) + '1A',
+                fill: true,
+                tension: 0.2,
+                borderWidth: 2
+            }));
+
+            if (consumptionChart) consumptionChart.destroy();
+            consumptionChart = new Chart(consumptionChartCanvas, {
+                type: 'line',
+                data: { labels: sortedMonths, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Month' } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Total Sessions' } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            filter: (item) => item.raw > 0,
+                            itemSort: (a, b) => b.raw - a.raw
+                        }
+                    }
+                }
+            });
+            chartContainer.classList.remove('hidden');
+        }
+
+        function displayYearlyConsumptionChart(data) {
+            const yearlyData = {};
+            const datasetKeys = new Set();
+            data.forEach(row => {
+                const date = parseMDYDate(row.month);
+                if (!date) return;
+                const yearKey = date.getUTCFullYear();
+                const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                const dataKey = `${row.domain || 'Unknown'} - ${row.channel || 'Unknown'}`;
+                datasetKeys.add(dataKey);
+                if (!yearlyData[yearKey]) yearlyData[yearKey] = {};
+                if (!yearlyData[yearKey][dataKey]) yearlyData[yearKey][dataKey] = 0;
+                yearlyData[yearKey][dataKey] += count;
+            });
+
+            const sortedYears = [...new Set(originalData.map(r => parseMDYDate(r.month)).filter(Boolean).map(d => d.getUTCFullYear()))].sort();
+            const sortedDatasetKeys = Array.from(datasetKeys).sort();
+            const datasets = sortedDatasetKeys.map((key, index) => ({
+                label: key,
+                data: sortedYears.map(year => yearlyData[year]?.[key] || 0),
+                borderColor: generateColor(index),
+                backgroundColor: generateColor(index) + '1A',
+                fill: true,
+                tension: 0.2,
+                borderWidth: 2
+            }));
+
+            if (yearlyConsumptionChart) yearlyConsumptionChart.destroy();
+            yearlyConsumptionChart = new Chart(yearlyConsumptionChartCanvas, {
+                type: 'line',
+                data: { labels: sortedYears.map(year => new Date(year, 0, 1)), datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { type: 'time', time: { unit: 'year' }, title: { display: true, text: 'Year' } },
+                        y: { beginAtZero: true, title: { display: true, text: 'Total Sessions' } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            filter: (item) => item.raw > 0,
+                            itemSort: (a, b) => b.raw - a.raw
+                        }
+                    }
+                }
+            });
+            yearlyChartContainer.classList.remove('hidden');
+        }
+        
+        function generateTrendAnalysis() {
+            try {
+                const totalAllotment = parseFloat(totalAllotmentInput.value);
+                const startDate = new Date(startDateInput.value + 'T00:00:00Z');
+                const endDate = new Date(endDateInput.value + 'T00:00:00Z');
+
+                if (isNaN(totalAllotment) || totalAllotment <= 0) throw new Error("Invalid Total Allotment value.");
+                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new Error("Invalid start or end date.");
+                if (endDate <= startDate) throw new Error("End date must be after start date.");
+
+                // --- DATA PREPARATION ---
+                const monthlyDataMap = new Map();
+                let totalConsumedInTerm = 0;
+
+                const termData = originalData.filter(row => {
+                    const date = parseMDYDate(row.month);
+                    return date && date >= startDate && date <= endDate;
+                });
+
+                termData.forEach(row => {
+                    const date = parseMDYDate(row.month);
+                    if (!date) return;
+                    const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                    totalConsumedInTerm += count;
+                    const monthKey = date.toISOString().slice(0, 7);
+                    const currentMonthTotal = (monthlyDataMap.get(monthKey) || 0) + count;
+                    monthlyDataMap.set(monthKey, currentMonthTotal);
+                });
+
+                const cumulativeSumMap = new Map();
+                let cumulativeSum = 0;
+                const sortedMonthsInData = Array.from(monthlyDataMap.keys()).sort();
+                sortedMonthsInData.forEach(monthKey => {
+                    cumulativeSum += monthlyDataMap.get(monthKey);
+                    cumulativeSumMap.set(monthKey, cumulativeSum);
+                });
+
+                // --- CHART DATA GENERATION ---
+                const termStart = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1));
+                const termEnd = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), 1));
+                
+                const fullTermLabels = [];
+                let currentMonth = new Date(termStart);
+                while (currentMonth <= termEnd) {
+                    fullTermLabels.push(currentMonth.toISOString().slice(0, 7));
+                    currentMonth.setUTCMonth(currentMonth.getUTCMonth() + 1);
+                }
+
+                const termDurationDays = (endDate - startDate) / (1000 * 60 * 60 * 24);
+                const idealRatePerDay = termDurationDays > 0 ? totalAllotment / termDurationDays : 0;
+                
+                const idealLineData = fullTermLabels.map(monthKey => {
+                    const pointDate = new Date(monthKey + '-02T00:00:00Z');
+                    const daysFromStart = (pointDate - startDate) / (1000 * 60 * 60 * 24);
+                    return Math.max(0, idealRatePerDay * (daysFromStart + 1));
+                });
+
+                const lastDataMonth = sortedMonthsInData[sortedMonthsInData.length - 1];
+                const actualConsumptionData = fullTermLabels.map(monthKey => {
+                    if (monthKey > lastDataMonth) return null;
+                    return cumulativeSumMap.get(monthKey);
+                });
+
+                // --- PREDICTION LOGIC ---
+                let predictedConsumptionData = [];
+                let predictedConsumptionPercent = 0;
+                if (sortedMonthsInData.length > 0) {
+                    const averageMonthlyConsumption = totalConsumedInTerm / sortedMonthsInData.length;
+                    const lastCumulativeValue = cumulativeSumMap.get(lastDataMonth);
+                    const lastDataIndex = fullTermLabels.indexOf(lastDataMonth);
+                    
+                    predictedConsumptionData = new Array(fullTermLabels.length).fill(null);
+                    predictedConsumptionData[lastDataIndex] = lastCumulativeValue;
+
+                    for (let i = lastDataIndex + 1; i < fullTermLabels.length; i++) {
+                        predictedConsumptionData[i] = predictedConsumptionData[i-1] + averageMonthlyConsumption;
+                    }
+                    const finalPredictedValue = predictedConsumptionData[predictedConsumptionData.length - 1];
+                    predictedConsumptionPercent = (finalPredictedValue / totalAllotment) * 100;
+                }
+                
+                // --- KPI CALCULATION ---
+                const consumptionPercent = (totalConsumedInTerm / totalAllotment) * 100;
+                const today = new Date();
+                const daysElapsed = (today - startDate) / (1000 * 60 * 60 * 24);
+                const expectedConsumptionToday = Math.max(0, idealRatePerDay * daysElapsed);
+                const pacingStatus = getPacingStatus(totalConsumedInTerm, expectedConsumptionToday);
+
+                kpiConsumption.textContent = `${consumptionPercent.toFixed(1)}%`;
+                kpiPacing.textContent = pacingStatus;
+                kpiPredicted.textContent = `${predictedConsumptionPercent.toFixed(1)}%`;
+                kpiPacing.className = 'text-4xl font-bold mt-2';
+                if (pacingStatus === 'Ahead') kpiPacing.classList.add('text-red-600');
+                else if (pacingStatus === 'Behind') kpiPacing.classList.add('text-yellow-500');
+                else kpiPacing.classList.add('text-blue-600');
+
+                // --- CHART RENDERING ---
+                if (trendChart) trendChart.destroy();
+                trendChart = new Chart(trendChartCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: fullTermLabels,
+                        datasets: [
+                            {
+                                label: 'Actual Cumulative Consumption',
+                                data: actualConsumptionData,
+                                borderColor: '#4f46e5',
+                                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                                fill: true,
+                                tension: 0.1,
+                                spanGaps: true,
+                            },
+                            {
+                                label: 'Ideal Consumption Pace',
+                                data: idealLineData,
+                                borderColor: '#10b981',
+                                borderDash: [5, 5],
+                                fill: false,
+                                tension: 0.1,
+                            },
+                            {
+                                label: 'Predicted Consumption',
+                                data: predictedConsumptionData,
+                                borderColor: '#ef4444',
+                                borderDash: [10, 5],
+                                fill: false,
+                                tension: 0.1,
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Date' } },
+                            y: { beginAtZero: true, title: { display: true, text: 'Cumulative Sessions' } }
+                        },
+                        plugins: {
+                            legend: { position: 'top' },
+                            tooltip: { mode: 'index', intersect: false }
+                        }
+                    }
+                });
+
+                trendAnalysisContainer.classList.remove('hidden');
+
+            } catch (e) {
+                displayMessage(e.message, 'error');
+            }
+        }
+
+        // --- Utility Functions ---
+        function displayMessage(message, type) {
+            statusMessage.textContent = message;
+            statusMessage.className = `mt-4 p-4 rounded-lg ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+            statusMessage.classList.remove('hidden');
+        }
+        
+        function parseMDYDate(dateString) {
+            if (!dateString || typeof dateString !== 'string') return null;
+            const parts = dateString.split('/');
+            if (parts.length !== 3) return null;
+            const month = parseInt(parts[0], 10);
+            const day = parseInt(parts[1], 10);
+            const year = parseInt(parts[2], 10);
+            if (isNaN(month) || isNaN(day) || isNaN(year) || year < 1000 || year > 3000) return null;
+            const date = new Date(Date.UTC(year, month - 1, day));
+            if (date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day) {
+                return date;
+            }
+            return null;
+        }
+        
+        function generateColor(index) {
+            const colors = [
+                '#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899',
+                '#6366f1', '#22c55e', '#d97706', '#dc2626', '#2563eb', '#7c3aed', '#db2777',
+                '#06b6d4', '#f97316', '#84cc16', '#e11d48', '#14b8a6', '#f43f5e', '#a855f7'
+            ];
+            return colors[index % colors.length];
+        }
+
+        function getPacingStatus(actual, expected) {
+            if (expected <= 0) return "On Track";
+            const variance = (actual - expected) / expected;
+            if (variance > 0.1) return "Ahead";
+            if (variance < -0.1) return "Behind";
+            return "On Track";
+        }
+
+        function displayTable(headers, data) {
+            const headerRow = document.createElement('tr');
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.scope = 'col';
+                th.className = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
+                th.textContent = headerText;
+                headerRow.appendChild(th);
+            });
+            tableHeader.appendChild(headerRow);
+
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                headers.forEach(header => {
+                    const td = document.createElement('td');
+                    td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-700';
+                    td.textContent = row[header];
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+            tableContainer.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
