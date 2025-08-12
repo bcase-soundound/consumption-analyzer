@@ -1,4 +1,3 @@
-#TEST#
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,6 +10,9 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <!-- Added SheetJS library for Excel parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Added libraries for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -52,9 +54,38 @@
             border: 1px solid #d1d5db;
             border-radius: 0.5rem;
         }
+        /* Styles for the loading spinner */
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4f46e5;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800">
+
+    <div id="loading-overlay" class="overlay hidden">
+        <div class="loader"></div>
+    </div>
 
     <div class="container mx-auto p-4 sm:p-6 lg:p-8">
         <header class="text-center mb-8">
@@ -67,6 +98,10 @@
             <input type="file" id="file-input" accept=".csv,.xlsx" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"/>
             
             <div id="status-message" class="mt-4 p-4 rounded-lg hidden"></div>
+        </div>
+        
+        <div id="download-container" class="mt-8 text-center hidden">
+            <button id="download-report-btn" class="btn-primary">Download Report as PDF</button>
         </div>
 
         <div id="chart-container" class="mt-8 card hidden">
@@ -124,8 +159,8 @@
              <button id="analyze-trends-btn" class="btn-primary w-full mt-4">Generate Trend Analysis</button>
         </div>
         
-        <div id="trend-analysis-container" class="mt-8 hidden">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+        <div id="trend-analysis-container" class="mt-8 hidden space-y-8">
+            <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="card text-center">
                     <h3 class="text-lg font-medium text-gray-500">Total Consumption</h3>
                     <p id="kpi-consumption" class="text-4xl font-bold text-indigo-600 mt-2">0%</p>
@@ -138,7 +173,20 @@
                     <h3 class="text-lg font-medium text-gray-500">Predicted Consumption</h3>
                     <p id="kpi-predicted" class="text-4xl font-bold text-red-600 mt-2">0%</p>
                 </div>
+                <div class="card">
+                    <h3 class="text-lg font-medium text-gray-500 text-center mb-2">Top Consumers (In Term)</h3>
+                    <ul id="kpi-top-consumers-list" class="text-sm space-y-1">
+                        <!-- Top consumers will be listed here -->
+                    </ul>
+                </div>
             </div>
+
+            <div id="summary-container" class="card">
+                <h2 class="text-xl font-semibold mb-4">Trend Analysis Summary</h2>
+                <textarea id="summary-text" class="w-full h-48 p-2 border border-gray-300 rounded-md font-mono text-sm bg-gray-50" readonly></textarea>
+                <button id="copy-summary-btn" class="btn-primary mt-4">Copy Summary</button>
+            </div>
+
             <div class="card">
                 <h2 class="text-xl font-semibold mb-4">Consumption Burn-Up vs. Ideal Pace</h2>
                 <div style="height: 400px;">
@@ -163,6 +211,7 @@
         // --- DOM Element References ---
         const fileInput = document.getElementById('file-input');
         const statusMessage = document.getElementById('status-message');
+        const loadingOverlay = document.getElementById('loading-overlay');
         
         const chartContainer = document.getElementById('chart-container');
         const consumptionChartCanvas = document.getElementById('consumption-chart');
@@ -187,17 +236,28 @@
         const endDateInput = document.getElementById('end-date');
 
         const trendAnalysisContainer = document.getElementById('trend-analysis-container');
+        const kpiCards = document.getElementById('kpi-cards');
         const kpiConsumption = document.getElementById('kpi-consumption');
         const kpiPacing = document.getElementById('kpi-pacing');
         const kpiPredicted = document.getElementById('kpi-predicted');
+        const kpiTopConsumersList = document.getElementById('kpi-top-consumers-list');
         const trendChartCanvas = document.getElementById('trend-chart');
         let trendChart = null;
+        
+        const summaryContainer = document.getElementById('summary-container');
+        const summaryText = document.getElementById('summary-text');
+        const copySummaryBtn = document.getElementById('copy-summary-btn');
+        
+        const downloadContainer = document.getElementById('download-container');
+        const downloadReportBtn = document.getElementById('download-report-btn');
 
         let originalData = [];
 
         // --- Event Listeners ---
         fileInput.addEventListener('change', handleFileSelect);
         analyzeTrendsBtn.addEventListener('click', generateTrendAnalysis);
+        downloadReportBtn.addEventListener('click', downloadReport);
+        copySummaryBtn.addEventListener('click', copySummary);
 
         // --- Main Functions ---
         function handleFileSelect(event) {
@@ -208,6 +268,7 @@
             filterContainer.classList.add('hidden');
             allotmentContainer.classList.add('hidden');
             trendAnalysisContainer.classList.add('hidden');
+            downloadContainer.classList.add('hidden');
             statusMessage.classList.add('hidden');
             tableHeader.innerHTML = '';
             tableBody.innerHTML = '';
@@ -392,6 +453,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false, // Disable animation for clean PDF capture
                     scales: {
                         x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Month' } },
                         y: { beginAtZero: true, title: { display: true, text: 'Total Sessions' } }
@@ -444,6 +506,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false, // Disable animation for clean PDF capture
                     scales: {
                         x: { type: 'time', time: { unit: 'year' }, title: { display: true, text: 'Year' } },
                         y: { beginAtZero: true, title: { display: true, text: 'Total Sessions' } }
@@ -475,6 +538,7 @@
                 // --- DATA PREPARATION ---
                 const monthlyDataMap = new Map();
                 let totalConsumedInTerm = 0;
+                const topConsumersMap = new Map();
 
                 const termData = originalData.filter(row => {
                     const date = parseMDYDate(row.month);
@@ -489,6 +553,10 @@
                     const monthKey = date.toISOString().slice(0, 7);
                     const currentMonthTotal = (monthlyDataMap.get(monthKey) || 0) + count;
                     monthlyDataMap.set(monthKey, currentMonthTotal);
+
+                    const consumerKey = `${row.domain || 'Unknown'} - ${row.channel || 'Unknown'}`;
+                    const currentConsumerTotal = (topConsumersMap.get(consumerKey) || 0) + count;
+                    topConsumersMap.set(consumerKey, currentConsumerTotal);
                 });
 
                 const cumulativeSumMap = new Map();
@@ -558,6 +626,34 @@
                 else if (pacingStatus === 'Behind') kpiPacing.classList.add('text-yellow-500');
                 else kpiPacing.classList.add('text-blue-600');
 
+                const topConsumers = Array.from(topConsumersMap.entries())
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3);
+                
+                kpiTopConsumersList.innerHTML = topConsumers.map(item => 
+                    `<li class="flex justify-between">
+                        <span class="truncate pr-2">${item[0]}</span>
+                        <span class="font-semibold">${item[1].toLocaleString()}</span>
+                    </li>`
+                ).join('');
+
+
+                // --- SUMMARY TEXT ---
+                const summary = `
+Consumption Analysis Report
+---------------------------
+Term Period: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}
+Total Allotment: ${totalAllotment.toLocaleString()} sessions
+
+Analysis based on data within the term:
+- Total Consumed: ${totalConsumedInTerm.toLocaleString()} sessions
+- Consumption Level: ${consumptionPercent.toFixed(1)}% of total allotment.
+- Current Pacing: ${pacingStatus}.
+- Predicted Consumption: On track to consume ${predictedConsumptionPercent.toFixed(1)}% of the total allotment by the end of the term.
+                `;
+                summaryText.value = summary.trim();
+
+
                 // --- CHART RENDERING ---
                 if (trendChart) trendChart.destroy();
                 trendChart = new Chart(trendChartCanvas, {
@@ -595,6 +691,7 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: false, // Disable animation for clean PDF capture
                         scales: {
                             x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Date' } },
                             y: { beginAtZero: true, title: { display: true, text: 'Cumulative Sessions' } }
@@ -607,10 +704,88 @@
                 });
 
                 trendAnalysisContainer.classList.remove('hidden');
+                downloadContainer.classList.remove('hidden');
 
             } catch (e) {
                 displayMessage(e.message, 'error');
             }
+        }
+        
+        async function downloadReport() {
+            loadingOverlay.classList.remove('hidden');
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'p',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const addImageToPdf = async (element, doc, yPos, title) => {
+                const canvas = await html2canvas(element, { 
+                    scale: 2,
+                    backgroundColor: '#ffffff'
+                });
+                const imgData = canvas.toDataURL('image/png');
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margin = 15;
+                const imgWidth = pageWidth - (margin * 2);
+                const imgHeight = (canvas.height * imgWidth) / canvas.width;
+                const titleHeight = 10;
+                
+                if (yPos + imgHeight + titleHeight > pageHeight - margin) {
+                    doc.addPage();
+                    yPos = margin;
+                }
+                
+                doc.setFontSize(16);
+                doc.text(title, margin, yPos);
+                yPos += titleHeight;
+                doc.addImage(imgData, 'PNG', margin, yPos, imgWidth, imgHeight);
+                return yPos + imgHeight + 5; // Return new Y position with padding
+            };
+
+            try {
+                doc.setFontSize(22);
+                doc.text('Consumption Analysis Report', 105, 140, { align: 'center' });
+                doc.setFontSize(12);
+                doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 150, { align: 'center' });
+
+                let yPos = 15;
+
+                if (trendAnalysisContainer.offsetParent !== null) {
+                    doc.addPage();
+                    yPos = await addImageToPdf(kpiCards, doc, yPos, 'Key Performance Indicators');
+                    yPos = await addImageToPdf(trendChartCanvas, doc, yPos, 'Consumption Burn-Up vs. Ideal Pace');
+                }
+                if (chartContainer.offsetParent !== null) {
+                    yPos = await addImageToPdf(consumptionChartCanvas, doc, yPos, 'Monthly Consumption');
+                }
+                if (yearlyChartContainer.offsetParent !== null) {
+                    yPos = await addImageToPdf(yearlyConsumptionChartCanvas, doc, yPos, 'Yearly Consumption');
+                }
+                
+                doc.deletePage(1);
+                doc.save('Consumption_Report.pdf');
+
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+                displayMessage('Failed to generate PDF report.', 'error');
+            } finally {
+                 loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        function copySummary() {
+            summaryText.select();
+            document.execCommand('copy');
+            
+            const originalText = copySummaryBtn.textContent;
+            copySummaryBtn.textContent = 'Copied!';
+            setTimeout(() => {
+                copySummaryBtn.textContent = originalText;
+            }, 2000);
         }
 
         // --- Utility Functions ---
