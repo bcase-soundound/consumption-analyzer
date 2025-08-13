@@ -204,6 +204,40 @@
             </div>
         </div>
 
+        <div id="aggregate-totals-container" class="mt-8 card hidden">
+            <h2 class="text-xl font-semibold mb-4">Aggregate Totals</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-2">Monthly Totals</h3>
+                    <div class="overflow-x-auto max-h-60">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Month</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Sessions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthly-totals-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-700 mb-2">Yearly Totals</h3>
+                    <div class="overflow-x-auto max-h-60">
+                         <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Year</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Sessions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="yearly-totals-body" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
 
         <div id="table-container" class="mt-8 card hidden">
             <h2 class="text-xl font-semibold mb-4">Raw File Contents</h2>
@@ -261,6 +295,10 @@
         const downloadContainer = document.getElementById('download-container');
         const downloadReportBtn = document.getElementById('download-report-btn');
 
+        const aggregateTotalsContainer = document.getElementById('aggregate-totals-container');
+        const monthlyTotalsBody = document.getElementById('monthly-totals-body');
+        const yearlyTotalsBody = document.getElementById('yearly-totals-body');
+
         let originalData = [];
 
         // --- Event Listeners ---
@@ -279,6 +317,7 @@
             allotmentContainer.classList.add('hidden');
             trendAnalysisContainer.classList.add('hidden');
             downloadContainer.classList.add('hidden');
+            aggregateTotalsContainer.classList.add('hidden');
             statusMessage.classList.add('hidden');
             tableHeader.innerHTML = '';
             tableBody.innerHTML = '';
@@ -363,6 +402,7 @@
                 setupFilters(originalData);
                 updateChartFromFilters();
                 displayTable(Object.keys(originalData[0]), originalData);
+                displayAggregateTotals(originalData);
                 allotmentContainer.classList.remove('hidden');
             } catch (e) {
                 displayMessage(e.message, 'error');
@@ -634,7 +674,7 @@
                 
                 // --- KPI CALCULATION ---
                 const consumptionPercent = (totalConsumedInTerm / totalAllotment) * 100;
-                const pacingStatus = getPacingStatus(predictedConsumptionPercent); // **MODIFIED**
+                const pacingStatus = getPacingStatus(predictedConsumptionPercent);
 
                 kpiConsumption.textContent = `${consumptionPercent.toFixed(1)}%`;
                 kpiPacing.textContent = pacingStatus;
@@ -783,6 +823,9 @@ Analysis based on data within the term:
                 if (yearlyChartContainer.offsetParent !== null) {
                     yPos = await addImageToPdf(yearlyConsumptionChartCanvas, doc, yPos, 'Yearly Consumption');
                 }
+                if (aggregateTotalsContainer.offsetParent !== null) {
+                    yPos = await addImageToPdf(aggregateTotalsContainer, doc, yPos, 'Aggregate Totals');
+                }
                 
                 doc.deletePage(1);
                 doc.save('Consumption_Report.pdf');
@@ -865,6 +908,42 @@ Analysis based on data within the term:
                 tableBody.appendChild(tr);
             });
             tableContainer.classList.remove('hidden');
+        }
+
+        function displayAggregateTotals(data) {
+            const monthlyTotals = {};
+            const yearlyTotals = {};
+
+            data.forEach(row => {
+                const date = parseMDYDate(row.month);
+                if (date) {
+                    const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                    const monthKey = date.toISOString().slice(0, 7);
+                    const yearKey = date.getUTCFullYear();
+                    monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + count;
+                    yearlyTotals[yearKey] = (yearlyTotals[yearKey] || 0) + count;
+                }
+            });
+
+            monthlyTotalsBody.innerHTML = '';
+            Object.keys(monthlyTotals).sort().forEach(month => {
+                const row = `<tr>
+                    <td class="px-4 py-2 text-sm text-gray-700">${month}</td>
+                    <td class="px-4 py-2 text-sm text-gray-700">${monthlyTotals[month].toLocaleString()}</td>
+                </tr>`;
+                monthlyTotalsBody.innerHTML += row;
+            });
+
+            yearlyTotalsBody.innerHTML = '';
+            Object.keys(yearlyTotals).sort().forEach(year => {
+                const row = `<tr>
+                    <td class="px-4 py-2 text-sm text-gray-700">${year}</td>
+                    <td class="px-4 py-2 text-sm text-gray-700">${yearlyTotals[year].toLocaleString()}</td>
+                </tr>`;
+                yearlyTotalsBody.innerHTML += row;
+            });
+
+            aggregateTotalsContainer.classList.remove('hidden');
         }
     </script>
 </body>
