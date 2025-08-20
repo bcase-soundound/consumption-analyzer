@@ -54,6 +54,10 @@
             border: 1px solid #d1d5db;
             border-radius: 0.5rem;
         }
+        .input-field:disabled {
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
         /* Styles for the loading spinner */
         .loader {
             border: 5px solid #f3f3f3;
@@ -142,18 +146,24 @@
 
         <div id="allotment-container" class="mt-8 card hidden">
             <h2 class="text-xl font-semibold mb-4">Analyze Consumption vs. Allotment</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                <div>
-                    <label for="total-allotment" class="block text-sm font-medium text-gray-700 mb-1">Total Session Allotment</label>
-                    <input type="number" id="total-allotment" class="input-field" placeholder="e.g., 1000000">
-                </div>
-                <div>
-                    <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Term Start Date</label>
-                    <input type="date" id="start-date" class="input-field">
-                </div>
-                 <div>
-                    <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">Term End Date</label>
-                    <input type="date" id="end-date" class="input-field">
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label for="total-allotment" class="block text-sm font-medium text-gray-700 mb-1">Total Session Allotment</label>
+                        <input type="number" id="total-allotment" class="input-field" placeholder="e.g., 1000000">
+                    </div>
+                    <div class="flex items-center h-full pt-6">
+                         <input type="checkbox" id="unlimited-allotment" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                         <label for="unlimited-allotment" class="ml-2 block text-sm text-gray-900">Unlimited Allotment</label>
+                    </div>
+                    <div>
+                        <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Term Start Date</label>
+                        <input type="date" id="start-date" class="input-field">
+                    </div>
+                     <div>
+                        <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">Term End Date</label>
+                        <input type="date" id="end-date" class="input-field">
+                    </div>
                 </div>
                 <div>
                     <label for="prediction-window" class="block text-sm font-medium text-gray-700 mb-1">Base Prediction On</label>
@@ -171,7 +181,7 @@
         <div id="trend-analysis-container" class="mt-8 hidden space-y-8">
             <div id="kpi-cards" class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div class="card text-center">
-                    <h3 class="text-lg font-medium text-gray-500">Total Consumption</h3>
+                    <h3 id="kpi-consumption-title" class="text-lg font-medium text-gray-500">Total Consumption</h3>
                     <p id="kpi-consumption" class="text-4xl font-bold text-indigo-600 mt-2">0%</p>
                 </div>
                 <div class="card text-center">
@@ -179,7 +189,7 @@
                     <p id="kpi-pacing" class="text-4xl font-bold text-blue-600 mt-2">On Track</p>
                 </div>
                  <div class="card text-center">
-                    <h3 class="text-lg font-medium text-gray-500">Predicted Consumption</h3>
+                    <h3 id="kpi-predicted-title" class="text-lg font-medium text-gray-500">Predicted Consumption</h3>
                     <p id="kpi-predicted" class="text-4xl font-bold text-red-600 mt-2">0%</p>
                 </div>
                 <div class="card">
@@ -275,6 +285,7 @@
         const allotmentContainer = document.getElementById('allotment-container');
         const analyzeTrendsBtn = document.getElementById('analyze-trends-btn');
         const totalAllotmentInput = document.getElementById('total-allotment');
+        const unlimitedAllotmentCheckbox = document.getElementById('unlimited-allotment');
         const startDateInput = document.getElementById('start-date');
         const endDateInput = document.getElementById('end-date');
         const predictionWindowInput = document.getElementById('prediction-window');
@@ -282,8 +293,10 @@
         const trendAnalysisContainer = document.getElementById('trend-analysis-container');
         const kpiCards = document.getElementById('kpi-cards');
         const kpiConsumption = document.getElementById('kpi-consumption');
+        const kpiConsumptionTitle = document.getElementById('kpi-consumption-title');
         const kpiPacing = document.getElementById('kpi-pacing');
         const kpiPredicted = document.getElementById('kpi-predicted');
+        const kpiPredictedTitle = document.getElementById('kpi-predicted-title');
         const kpiTopConsumersList = document.getElementById('kpi-top-consumers-list');
         const trendChartCanvas = document.getElementById('trend-chart');
         let trendChart = null;
@@ -306,6 +319,12 @@
         analyzeTrendsBtn.addEventListener('click', generateTrendAnalysis);
         downloadReportBtn.addEventListener('click', downloadReport);
         copySummaryBtn.addEventListener('click', copySummary);
+        unlimitedAllotmentCheckbox.addEventListener('change', (e) => {
+            totalAllotmentInput.disabled = e.target.checked;
+            if (e.target.checked) {
+                totalAllotmentInput.value = '';
+            }
+        });
 
         // --- Main Functions ---
         function handleFileSelect(event) {
@@ -577,24 +596,23 @@
         
         function generateTrendAnalysis() {
             try {
-                const totalAllotment = parseFloat(totalAllotmentInput.value);
+                const isUnlimited = unlimitedAllotmentCheckbox.checked;
+                const totalAllotment = isUnlimited ? Infinity : parseFloat(totalAllotmentInput.value);
                 const startDate = new Date(startDateInput.value + 'T00:00:00Z');
                 const endDate = new Date(endDateInput.value + 'T00:00:00Z');
                 const predictionWindow = predictionWindowInput.value;
 
-                if (isNaN(totalAllotment) || totalAllotment <= 0) throw new Error("Invalid Total Allotment value.");
+                if (!isUnlimited && (isNaN(totalAllotment) || totalAllotment <= 0)) throw new Error("Invalid Total Allotment value.");
                 if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new Error("Invalid start or end date.");
                 if (endDate <= startDate) throw new Error("End date must be after start date.");
 
-                // **MODIFIED**: Get filtered data for trend analysis
+                // --- DATA PREPARATION ---
                 const selectedDomains = Array.from(document.querySelectorAll('input[name="domains"]:checked')).map(cb => cb.value);
                 const selectedChannels = Array.from(document.querySelectorAll('input[name="channels"]:checked')).map(cb => cb.value);
                 const dataForAnalysis = originalData.filter(row => {
                     return selectedDomains.includes(row.domain || 'Unknown') && selectedChannels.includes(row.channel || 'Unknown');
                 });
 
-
-                // --- DATA PREPARATION ---
                 const monthlyDataMap = new Map();
                 let totalConsumedInTerm = 0;
                 const topConsumersMap = new Map();
@@ -637,25 +655,18 @@
                     currentMonth.setUTCMonth(currentMonth.getUTCMonth() + 1);
                 }
 
-                const termDurationDays = (endDate - startDate) / (1000 * 60 * 60 * 24);
-                const idealRatePerDay = termDurationDays > 0 ? totalAllotment / termDurationDays : 0;
-                
-                const idealLineData = fullTermLabels.map(monthKey => {
-                    const pointDate = new Date(monthKey + '-02T00:00:00Z');
-                    const daysFromStart = (pointDate - startDate) / (1000 * 60 * 60 * 24);
-                    return Math.max(0, idealRatePerDay * (daysFromStart + 1));
-                });
-
                 const lastDataMonth = sortedMonthsInData[sortedMonthsInData.length - 1];
                 const actualConsumptionData = fullTermLabels.map(monthKey => {
                     if (monthKey > lastDataMonth) return null;
                     return cumulativeSumMap.get(monthKey);
                 });
 
-                // --- PREDICTION LOGIC ---
+                // --- PREDICTION & IDEAL PACE LOGIC ---
                 let predictedConsumptionData = [];
-                let predictedConsumptionPercent = 0;
+                let predictedConsumptionFinal = 0;
+                let idealLineData = [];
                 let predictionBasisText = "all available data";
+
                 if (sortedMonthsInData.length > 0) {
                     let monthsForPrediction = sortedMonthsInData;
                     if (predictionWindow !== 'all') {
@@ -663,49 +674,57 @@
                         monthsForPrediction = sortedMonthsInData.slice(-windowSize);
                         predictionBasisText = `the last ${monthsForPrediction.length} months`;
                     }
-                    
                     const predictionPeriodConsumption = monthsForPrediction.reduce((sum, monthKey) => sum + monthlyDataMap.get(monthKey), 0);
                     const averageMonthlyConsumption = predictionPeriodConsumption / monthsForPrediction.length;
-
                     const lastCumulativeValue = cumulativeSumMap.get(lastDataMonth);
                     const lastDataIndex = fullTermLabels.indexOf(lastDataMonth);
-                    
                     predictedConsumptionData = new Array(fullTermLabels.length).fill(null);
                     predictedConsumptionData[lastDataIndex] = lastCumulativeValue;
-
                     for (let i = lastDataIndex + 1; i < fullTermLabels.length; i++) {
                         predictedConsumptionData[i] = predictedConsumptionData[i-1] + averageMonthlyConsumption;
                     }
-                    const finalPredictedValue = predictedConsumptionData[predictedConsumptionData.length - 1];
-                    predictedConsumptionPercent = (finalPredictedValue / totalAllotment) * 100;
+                    predictedConsumptionFinal = predictedConsumptionData[predictedConsumptionData.length - 1];
                 }
                 
-                // --- KPI CALCULATION ---
-                const consumptionPercent = (totalConsumedInTerm / totalAllotment) * 100;
-                const pacingStatus = getPacingStatus(predictedConsumptionPercent);
+                // --- KPI & SUMMARY UPDATE ---
+                let summary;
+                if (isUnlimited) {
+                    kpiConsumptionTitle.textContent = "Total Sessions Consumed";
+                    kpiPredictedTitle.textContent = "Predicted Total Sessions";
+                    kpiConsumption.textContent = totalConsumedInTerm.toLocaleString();
+                    kpiPacing.textContent = "Unlimited";
+                    kpiPredicted.textContent = Math.round(predictedConsumptionFinal).toLocaleString();
+                    summary = `
+Consumption Analysis Report (Unlimited)
+---------------------------------------
+Term Period: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}
+Total Allotment: Unlimited
 
-                kpiConsumption.textContent = `${consumptionPercent.toFixed(1)}%`;
-                kpiPacing.textContent = pacingStatus;
-                kpiPredicted.textContent = `${predictedConsumptionPercent.toFixed(1)}%`;
-                kpiPacing.className = 'text-4xl font-bold mt-2';
-                if (pacingStatus === 'Ahead') kpiPacing.classList.add('text-red-600');
-                else if (pacingStatus === 'Behind') kpiPacing.classList.add('text-yellow-500');
-                else kpiPacing.classList.add('text-blue-600');
-
-                const topConsumers = Array.from(topConsumersMap.entries())
-                    .sort((a, b) => b[1] - a[1])
-                    .slice(0, 3);
-                
-                kpiTopConsumersList.innerHTML = topConsumers.map(item => 
-                    `<li class="flex justify-between">
-                        <span class="truncate pr-2">${item[0]}</span>
-                        <span class="font-semibold">${item[1].toLocaleString()}</span>
-                    </li>`
-                ).join('');
-
-
-                // --- SUMMARY TEXT ---
-                const summary = `
+Analysis based on data within the term:
+- Total Consumed: ${totalConsumedInTerm.toLocaleString()} sessions
+- Predicted Consumption (based on ${predictionBasisText}): On track to consume ${Math.round(predictedConsumptionFinal).toLocaleString()} sessions by the end of the term.
+                    `;
+                } else {
+                    kpiConsumptionTitle.textContent = "Total Consumption";
+                    kpiPredictedTitle.textContent = "Predicted Consumption";
+                    const consumptionPercent = (totalConsumedInTerm / totalAllotment) * 100;
+                    const predictedConsumptionPercent = (predictedConsumptionFinal / totalAllotment) * 100;
+                    const pacingStatus = getPacingStatus(predictedConsumptionPercent);
+                    kpiConsumption.textContent = `${consumptionPercent.toFixed(1)}%`;
+                    kpiPacing.textContent = pacingStatus;
+                    kpiPredicted.textContent = `${predictedConsumptionPercent.toFixed(1)}%`;
+                    if (pacingStatus === 'Ahead') kpiPacing.classList.add('text-red-600');
+                    else if (pacingStatus === 'Behind') kpiPacing.classList.add('text-yellow-500');
+                    else kpiPacing.classList.add('text-blue-600');
+                    
+                    const termDurationDays = (endDate - startDate) / (1000 * 60 * 60 * 24);
+                    const idealRatePerDay = termDurationDays > 0 ? totalAllotment / termDurationDays : 0;
+                    idealLineData = fullTermLabels.map(monthKey => {
+                        const pointDate = new Date(monthKey + '-02T00:00:00Z');
+                        const daysFromStart = (pointDate - startDate) / (1000 * 60 * 60 * 24);
+                        return Math.max(0, idealRatePerDay * (daysFromStart + 1));
+                    });
+                    summary = `
 Consumption Analysis Report
 ---------------------------
 Term Period: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}
@@ -716,56 +735,50 @@ Analysis based on data within the term:
 - Consumption Level: ${consumptionPercent.toFixed(1)}% of total allotment.
 - Current Pacing: ${pacingStatus}.
 - Predicted Consumption (based on ${predictionBasisText}): On track to consume ${predictedConsumptionPercent.toFixed(1)}% of the total allotment by the end of the term.
-                `;
+                    `;
+                }
                 summaryText.value = summary.trim();
 
+                const topConsumers = Array.from(topConsumersMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                kpiTopConsumersList.innerHTML = topConsumers.map(item => `<li class="flex justify-between"><span class="truncate pr-2">${item[0]}</span><span class="font-semibold">${item[1].toLocaleString()}</span></li>`).join('');
 
                 // --- CHART RENDERING ---
+                const trendDatasets = [{
+                    label: 'Actual Cumulative Consumption',
+                    data: actualConsumptionData,
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    fill: true, tension: 0.1, spanGaps: true,
+                }, {
+                    label: 'Predicted Consumption',
+                    data: predictedConsumptionData,
+                    borderColor: '#ef4444',
+                    borderDash: [10, 5],
+                    fill: false, tension: 0.1,
+                }];
+                if (!isUnlimited) {
+                    trendDatasets.splice(1, 0, {
+                        label: 'Ideal Consumption Pace',
+                        data: idealLineData,
+                        borderColor: '#10b981',
+                        borderDash: [5, 5],
+                        fill: false, tension: 0.1,
+                    });
+                }
+
                 if (trendChart) trendChart.destroy();
                 trendChart = new Chart(trendChartCanvas, {
                     type: 'line',
-                    data: {
-                        labels: fullTermLabels,
-                        datasets: [
-                            {
-                                label: 'Actual Cumulative Consumption',
-                                data: actualConsumptionData,
-                                borderColor: '#4f46e5',
-                                backgroundColor: 'rgba(79, 70, 229, 0.1)',
-                                fill: true,
-                                tension: 0.1,
-                                spanGaps: true,
-                            },
-                            {
-                                label: 'Ideal Consumption Pace',
-                                data: idealLineData,
-                                borderColor: '#10b981',
-                                borderDash: [5, 5],
-                                fill: false,
-                                tension: 0.1,
-                            },
-                            {
-                                label: 'Predicted Consumption',
-                                data: predictedConsumptionData,
-                                borderColor: '#ef4444',
-                                borderDash: [10, 5],
-                                fill: false,
-                                tension: 0.1,
-                            }
-                        ]
-                    },
+                    data: { labels: fullTermLabels, datasets: trendDatasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        animation: false, // Disable animation for clean PDF capture
+                        animation: false,
                         scales: {
                             x: { type: 'time', time: { unit: 'month' }, title: { display: true, text: 'Date' } },
                             y: { beginAtZero: true, title: { display: true, text: 'Cumulative Sessions' } }
                         },
-                        plugins: {
-                            legend: { position: 'top' },
-                            tooltip: { mode: 'index', intersect: false }
-                        }
+                        plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } }
                     }
                 });
 
