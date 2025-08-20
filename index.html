@@ -586,12 +586,20 @@
                 if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new Error("Invalid start or end date.");
                 if (endDate <= startDate) throw new Error("End date must be after start date.");
 
+                // **MODIFIED**: Get filtered data for trend analysis
+                const selectedDomains = Array.from(document.querySelectorAll('input[name="domains"]:checked')).map(cb => cb.value);
+                const selectedChannels = Array.from(document.querySelectorAll('input[name="channels"]:checked')).map(cb => cb.value);
+                const dataForAnalysis = originalData.filter(row => {
+                    return selectedDomains.includes(row.domain || 'Unknown') && selectedChannels.includes(row.channel || 'Unknown');
+                });
+
+
                 // --- DATA PREPARATION ---
                 const monthlyDataMap = new Map();
                 let totalConsumedInTerm = 0;
                 const topConsumersMap = new Map();
 
-                const termData = originalData.filter(row => {
+                const termData = dataForAnalysis.filter(row => {
                     const date = parseMDYDate(row.month);
                     return date && date >= startDate && date <= endDate;
                 });
