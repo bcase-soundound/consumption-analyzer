@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Consumption Analyzer</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- NEW: Added Flatpickr for a better date picker experience -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-    <!-- Added SheetJS library for Excel parsing -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Added libraries for PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -57,6 +58,10 @@
         .input-field:disabled {
             background-color: #f3f4f6;
             cursor: not-allowed;
+        }
+        .input-field.invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 1px #ef4444;
         }
         /* Styles for the loading spinner */
         .loader {
@@ -158,11 +163,13 @@
                     </div>
                     <div>
                         <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Term Start Date</label>
-                        <input type="date" id="start-date" class="input-field">
+                        <!-- MODIFIED: Using a standard text input for Flatpickr -->
+                        <input type="text" id="start-date" class="input-field" placeholder="MM/DD/YYYY">
                     </div>
                      <div>
                         <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">Term End Date</label>
-                        <input type="date" id="end-date" class="input-field">
+                        <!-- MODIFIED: Using a standard text input for Flatpickr -->
+                        <input type="text" id="end-date" class="input-field" placeholder="MM/DD/YYYY">
                     </div>
                 </div>
                 <div>
@@ -175,7 +182,8 @@
                     </select>
                 </div>
             </div>
-             <button id="analyze-trends-btn" class="btn-primary w-full mt-4">Generate Trend Analysis</button>
+             <button id="analyze-trends-btn" class="btn-primary w-full mt-4" disabled>Generate Trend Analysis</button>
+             <div id="date-error-message" class="text-red-600 text-sm mt-2 hidden"></div>
         </div>
         
         <div id="trend-analysis-container" class="mt-8 hidden space-y-8">
@@ -289,6 +297,7 @@
         const startDateInput = document.getElementById('start-date');
         const endDateInput = document.getElementById('end-date');
         const predictionWindowInput = document.getElementById('prediction-window');
+        const dateErrorMessage = document.getElementById('date-error-message');
 
         const trendAnalysisContainer = document.getElementById('trend-analysis-container');
         const kpiCards = document.getElementById('kpi-cards');
@@ -314,6 +323,19 @@
 
         let originalData = [];
 
+        // --- Initialize Flatpickr Date Pickers ---
+        const flatpickrConfig = {
+            dateFormat: "m/d/Y", // Set the display and parsing format
+            allowInput: true,     // Allow manual typing
+            onChange: function(selectedDates, dateStr, instance) {
+                // When a date is picked, trigger validation
+                validateAllInputs();
+            }
+        };
+        flatpickr("#start-date", flatpickrConfig);
+        flatpickr("#end-date", flatpickrConfig);
+
+
         // --- Event Listeners ---
         fileInput.addEventListener('change', handleFileSelect);
         analyzeTrendsBtn.addEventListener('click', generateTrendAnalysis);
@@ -324,7 +346,12 @@
             if (e.target.checked) {
                 totalAllotmentInput.value = '';
             }
+            validateAllInputs();
         });
+        
+        // Add 'input' event listener to all fields for real-time validation
+        const trendInputs = [totalAllotmentInput, startDateInput, endDateInput];
+        trendInputs.forEach(input => input.addEventListener('input', validateAllInputs));
 
         // --- Main Functions ---
         function handleFileSelect(event) {
@@ -423,6 +450,7 @@
                 displayTable(Object.keys(originalData[0]), originalData);
                 displayAggregateTotals(originalData);
                 allotmentContainer.classList.remove('hidden');
+                validateAllInputs();
             } catch (e) {
                 displayMessage(e.message, 'error');
             }
@@ -596,15 +624,22 @@
         
         function generateTrendAnalysis() {
             try {
+                if (!validateAllInputs()) {
+                    displayMessage("Please correct the errors before generating the report.", 'error', true);
+                    return;
+                }
+
                 const isUnlimited = unlimitedAllotmentCheckbox.checked;
                 const totalAllotment = isUnlimited ? Infinity : parseFloat(totalAllotmentInput.value);
-                const startDate = new Date(startDateInput.value + 'T00:00:00Z');
-                const endDate = new Date(endDateInput.value + 'T00:00:00Z');
-                const predictionWindow = predictionWindowInput.value;
+                
+                // Parse the MM/DD/YYYY format to create date objects
+                const [startMonth, startDay, startYear] = startDateInput.value.split('/').map(Number);
+                const startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay));
 
-                if (!isUnlimited && (isNaN(totalAllotment) || totalAllotment <= 0)) throw new Error("Invalid Total Allotment value.");
-                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) throw new Error("Invalid start or end date.");
-                if (endDate <= startDate) throw new Error("End date must be after start date.");
+                const [endMonth, endDay, endYear] = endDateInput.value.split('/').map(Number);
+                const endDate = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+
+                const predictionWindow = predictionWindowInput.value;
 
                 // --- DATA PREPARATION ---
                 const selectedDomains = Array.from(document.querySelectorAll('input[name="domains"]:checked')).map(cb => cb.value);
@@ -713,6 +748,7 @@ Analysis based on data within the term:
                     kpiConsumption.textContent = `${consumptionPercent.toFixed(1)}%`;
                     kpiPacing.textContent = pacingStatus;
                     kpiPredicted.textContent = `${predictedConsumptionPercent.toFixed(1)}%`;
+                    kpiPacing.className = 'text-4xl font-bold mt-2';
                     if (pacingStatus === 'Ahead') kpiPacing.classList.add('text-red-600');
                     else if (pacingStatus === 'Behind') kpiPacing.classList.add('text-yellow-500');
                     else kpiPacing.classList.add('text-blue-600');
@@ -786,7 +822,7 @@ Analysis based on data within the term:
                 downloadContainer.classList.remove('hidden');
 
             } catch (e) {
-                displayMessage(e.message, 'error');
+                displayMessage(e.message, 'error', true);
             }
         }
         
@@ -871,10 +907,107 @@ Analysis based on data within the term:
         }
 
         // --- Utility Functions ---
-        function displayMessage(message, type) {
-            statusMessage.textContent = message;
-            statusMessage.className = `mt-4 p-4 rounded-lg ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
-            statusMessage.classList.remove('hidden');
+        function displayMessage(message, type, isDateError = false) {
+            const targetElement = isDateError ? dateErrorMessage : statusMessage;
+            targetElement.textContent = message;
+            if (isDateError) {
+                targetElement.classList.remove('hidden');
+            } else {
+                targetElement.className = `mt-4 p-4 rounded-lg ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+                targetElement.classList.remove('hidden');
+            }
+        }
+
+        function hideMessage(isDateError = false) {
+            const targetElement = isDateError ? dateErrorMessage : statusMessage;
+            targetElement.classList.add('hidden');
+        }
+        
+        // --- NEW, ROBUST DATE VALIDATION LOGIC ---
+        function validateAllInputs() {
+            let error = null;
+            let isStartValid = false;
+            let isEndValid = false;
+
+            // --- Helper function for validating a single date string ---
+            function validateDate(dateStr, fieldName, inputElement) {
+                if (!dateStr) {
+                    inputElement.classList.remove('invalid');
+                    return { isValid: false, error: null };
+                }
+
+                // 1. Check for MM/DD/YYYY format
+                if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateStr)) {
+                    inputElement.classList.add('invalid');
+                    return { isValid: false, error: `${fieldName}: Please use MM/DD/YYYY format.` };
+                }
+
+                const [month, day, year] = dateStr.split('/').map(Number);
+
+                // 2. Check for a sensible year range
+                if (year < 1970 || year > 2099) {
+                    inputElement.classList.add('invalid');
+                    return { isValid: false, error: `${fieldName}: Year must be between 1970 and 2099.` };
+                }
+                
+                // 3. Check if the date is a real calendar date
+                const date = new Date(Date.UTC(year, month - 1, day));
+                if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+                    inputElement.classList.add('invalid');
+                    return { isValid: false, error: `${fieldName}: Please enter a real calendar date.` };
+                }
+
+                inputElement.classList.remove('invalid');
+                return { isValid: true, error: null };
+            }
+
+            // --- Run validation on both fields ---
+            const startValidation = validateDate(startDateInput.value, "Start Date", startDateInput);
+            isStartValid = startValidation.isValid;
+            error = startValidation.error;
+
+            const endValidation = validateDate(endDateInput.value, "End Date", endDateInput);
+            if (!error) {
+                isEndValid = endValidation.isValid;
+                error = endValidation.error;
+            } else {
+                validateDate(endDateInput.value, "End Date", endDateInput);
+            }
+
+            // --- Perform logical comparison if both dates are valid ---
+            if (!error && isStartValid && isEndValid) {
+                const [startMonth, startDay, startYear] = startDateInput.value.split('/').map(Number);
+                const startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+
+                const [endMonth, endDay, endYear] = endDateInput.value.split('/').map(Number);
+                const endDate = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+
+                if (endDate <= startDate) {
+                    error = "End date must be after start date.";
+                    startDateInput.classList.add('invalid');
+                    endDateInput.classList.add('invalid');
+                    isStartValid = false;
+                    isEndValid = false;
+                }
+            }
+
+            // --- Display error and set button state ---
+            if (error) {
+                displayMessage(error, 'error', true);
+            } else {
+                hideMessage(true);
+            }
+
+            const isFileReady = originalData && originalData.length > 0;
+            const isAllotmentReady = unlimitedAllotmentCheckbox.checked || (totalAllotmentInput.value && parseFloat(totalAllotmentInput.value) > 0);
+            
+            if (isFileReady && isAllotmentReady && isStartValid && isEndValid) {
+                analyzeTrendsBtn.disabled = false;
+            } else {
+                analyzeTrendsBtn.disabled = true;
+            }
+            
+            return !error;
         }
         
         function parseMDYDate(dateString) {
