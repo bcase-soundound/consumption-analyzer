@@ -163,12 +163,10 @@
                     </div>
                     <div>
                         <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">Term Start Date</label>
-                        <!-- MODIFIED: Using a standard text input for Flatpickr -->
                         <input type="text" id="start-date" class="input-field" placeholder="MM/DD/YYYY">
                     </div>
                      <div>
                         <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">Term End Date</label>
-                        <!-- MODIFIED: Using a standard text input for Flatpickr -->
                         <input type="text" id="end-date" class="input-field" placeholder="MM/DD/YYYY">
                     </div>
                 </div>
@@ -632,7 +630,7 @@
                 const isUnlimited = unlimitedAllotmentCheckbox.checked;
                 const totalAllotment = isUnlimited ? Infinity : parseFloat(totalAllotmentInput.value);
                 
-                // Parse the MM/DD/YYYY format to create date objects
+                // **FIXED:** Parse the MM/DD/YYYY format and create dates using Date.UTC
                 const [startMonth, startDay, startYear] = startDateInput.value.split('/').map(Number);
                 const startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay));
 
@@ -732,7 +730,7 @@
                     summary = `
 Consumption Analysis Report (Unlimited)
 ---------------------------------------
-Term Period: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}
+Term Period: ${startDateInput.value} to ${endDateInput.value}
 Total Allotment: Unlimited
 
 Analysis based on data within the term:
@@ -763,7 +761,7 @@ Analysis based on data within the term:
                     summary = `
 Consumption Analysis Report
 ---------------------------
-Term Period: ${startDate.toLocaleDateString()} to ${endDate.toLocaleDateString()}
+Term Period: ${startDateInput.value} to ${endDateInput.value}
 Total Allotment: ${totalAllotment.toLocaleString()} sessions
 
 Analysis based on data within the term:
