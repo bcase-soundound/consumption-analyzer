@@ -520,7 +520,9 @@
                 const date = parseMDYDate(row.month);
                 if (!date) return;
                 const monthKey = date.toISOString().slice(0, 7);
-                const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                // This handles both "1,234" (strings) and 1234 (numbers) safely
+                const count = Number(String(row.count || 0).replace(/,/g, '')) || 0;
+                //const count = Number(String(row.count).replace(/,/g, '')) || 0;
                 const dataKey = `${row.domain || 'Unknown'} - ${row.channel || 'Unknown'}`;
                 datasetKeys.add(dataKey);
                 if (!monthlyData[monthKey]) monthlyData[monthKey] = {};
@@ -574,7 +576,9 @@
                 const date = parseMDYDate(row.month);
                 if (!date) return;
                 const yearKey = date.getUTCFullYear();
-                const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                // This handles both "1,234" (strings) and 1234 (numbers) safely
+                const count = Number(String(row.count || 0).replace(/,/g, '')) || 0;
+                //const count = Number(String(row.count).replace(/,/g, '')) || 0;
                 const dataKey = `${row.domain || 'Unknown'} - ${row.channel || 'Unknown'}`;
                 datasetKeys.add(dataKey);
                 if (!yearlyData[yearKey]) yearlyData[yearKey] = {};
@@ -1007,11 +1011,19 @@ Analysis based on data within the term:
             
             return !error;
         }
-        
+
         function parseMDYDate(dateString) {
-            if (!dateString || typeof dateString !== 'string') return null;
-            // Split by either / or -
-            const parts = dateString.split(/[\/\-]/);
+            if (!dateString) return null;
+            // 1. Handle Excel Serial Dates (e.g., 46023)
+            if (!isNaN(dateString) && !String(dateString).includes('/') && !String(dateString).includes('-')) {
+                const excelDate = parseFloat(dateString);
+                // Excel base date is Dec 30, 1899
+                const date = new Date(Date.UTC(1899, 11, 30 + excelDate));
+                return date;
+            }
+            const dateStr = String(dateString);
+            // 2. Split by either / or -
+            const parts = dateStr.split(/[\/\-]/);
             if (parts.length !== 3) return null;
             let month, day, year;
             // Check if the first part is a 4-digit year (YYYY-MM-DD format)
@@ -1026,9 +1038,7 @@ Analysis based on data within the term:
                 year = parseInt(parts[2], 10);
             }
             if (isNaN(month) || isNaN(day) || isNaN(year) || year < 1000 || year > 3000) return null;
-            // Use Date.UTC to ensure consistency across timezones
             const date = new Date(Date.UTC(year, month - 1, day));
-            // Validate that it's a real calendar date
             if (date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day) {
                 return date;
             }
@@ -1050,7 +1060,12 @@ Analysis based on data within the term:
             return "On Track";
         }
 
+
         function displayTable(headers, data) {
+            // Clear existing table content first
+            tableHeader.innerHTML = '';
+            tableBody.innerHTML = '';
+        
             const headerRow = document.createElement('tr');
             headers.forEach(headerText => {
                 const th = document.createElement('th');
@@ -1060,13 +1075,23 @@ Analysis based on data within the term:
                 headerRow.appendChild(th);
             });
             tableHeader.appendChild(headerRow);
-
             data.forEach(row => {
                 const tr = document.createElement('tr');
                 headers.forEach(header => {
                     const td = document.createElement('td');
                     td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-700';
-                    td.textContent = row[header];
+                    let value = row[header];
+                    // Fix: If this is the month column, format it so 46023 becomes 1/1/2026
+                    if (header === 'month' && value) {
+                        const parsedDate = parseMDYDate(value);
+                        if (parsedDate) {
+                            // Formats to MM/DD/YYYY for the table display
+                            value = (parsedDate.getUTCMonth() + 1) + '/' + 
+                                    parsedDate.getUTCDate() + '/' + 
+                                    parsedDate.getUTCFullYear();
+                        }
+                    }
+                    td.textContent = value !== undefined ? value : '';
                     tr.appendChild(td);
                 });
                 tableBody.appendChild(tr);
@@ -1081,7 +1106,8 @@ Analysis based on data within the term:
             data.forEach(row => {
                 const date = parseMDYDate(row.month);
                 if (date) {
-                    const count = Number(String(row.count).replace(/,/g, '')) || 0;
+                    const count = Number(String(row.count || 0).replace(/,/g, '')) || 0;
+                    //const count = Number(String(row.count).replace(/,/g, '')) || 0;
                     const monthKey = date.toISOString().slice(0, 7);
                     const yearKey = date.getUTCFullYear();
                     monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + count;
