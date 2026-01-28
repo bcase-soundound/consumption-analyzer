@@ -1010,13 +1010,25 @@ Analysis based on data within the term:
         
         function parseMDYDate(dateString) {
             if (!dateString || typeof dateString !== 'string') return null;
-            const parts = dateString.split('/');
+            // Split by either / or -
+            const parts = dateString.split(/[\/\-]/);
             if (parts.length !== 3) return null;
-            const month = parseInt(parts[0], 10);
-            const day = parseInt(parts[1], 10);
-            const year = parseInt(parts[2], 10);
+            let month, day, year;
+            // Check if the first part is a 4-digit year (YYYY-MM-DD format)
+            if (parts[0].length === 4) {
+                year = parseInt(parts[0], 10);
+                month = parseInt(parts[1], 10);
+                day = parseInt(parts[2], 10);
+            } else {
+                // Assume MM/DD/YYYY format
+                month = parseInt(parts[0], 10);
+                day = parseInt(parts[1], 10);
+                year = parseInt(parts[2], 10);
+            }
             if (isNaN(month) || isNaN(day) || isNaN(year) || year < 1000 || year > 3000) return null;
+            // Use Date.UTC to ensure consistency across timezones
             const date = new Date(Date.UTC(year, month - 1, day));
+            // Validate that it's a real calendar date
             if (date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day) {
                 return date;
             }
